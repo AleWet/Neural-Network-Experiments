@@ -8,13 +8,14 @@
 #include <sstream>
 
 #include "ml/Network.h"
+#include "Utils.h"
 
-#include "VertexBuffer.h"
-#include "IndexBuffer.h"
-#include "VertexArray.h"
-#include "VertexBufferLayout.h"
-#include "Shader.h"
-#include "Texture.h"
+#include "graphics/VertexBuffer.h"
+#include "graphics/IndexBuffer.h"
+#include "graphics/VertexArray.h"
+#include "graphics/VertexBufferLayout.h"
+#include "graphics/Shader.h"
+#include "graphics/Texture.h"
 
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
@@ -22,19 +23,6 @@
 #include "vendor/imgui/imgui.h"
 #include "vendor/imgui/imgui_impl_glfw.h"
 #include "vendor/imgui/imgui_impl_opengl3.h"
-
-// Will be in Utils.h
-bool IsShaderPathOk(std::string shaderPath)
-{
-    std::ifstream fileCheck(shaderPath);
-    if (!fileCheck.good()) {
-        std::cerr << "Error: Cannot open shader file: " << shaderPath << std::endl;
-        // Handle the error (set a flag or throw an exception)
-        return false;
-    }
-    return true;
-}
-
 
 int main(void)
 {

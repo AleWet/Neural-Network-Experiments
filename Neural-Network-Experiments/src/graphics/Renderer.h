@@ -17,7 +17,7 @@ class Renderer
 {
 private:
 
-public: 
+public:
 	void Clear() const;
 	void Draw(const VertexArray& va, const IndexBuffer& ib, const Shader& shader) const; //this is goind to draw the entire input IndexBuffer 
 };
