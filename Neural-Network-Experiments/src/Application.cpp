@@ -7,8 +7,7 @@
 #include <string>
 #include <sstream>
 
-#include "Renderer.h"
-#include "core/Time.h"
+#include "ml/Network.h"
 
 #include "VertexBuffer.h"
 #include "IndexBuffer.h"
@@ -23,8 +22,6 @@
 #include "vendor/imgui/imgui.h"
 #include "vendor/imgui/imgui_impl_glfw.h"
 #include "vendor/imgui/imgui_impl_opengl3.h"
-
-const float fixedDeltaTime = 1.0f / 60.0f;
 
 // Will be in Utils.h
 bool IsShaderPathOk(std::string shaderPath)
@@ -92,28 +89,37 @@ int main(void)
 
     { //additional scope to avoid memory leaks
 
-        // Initialize STUFF
+        // Initialize 
         std::string Basic = "res/shaders/Basic.shader";
         if (!IsShaderPathOk(Basic)) return 0;
         Shader BasicShader(Basic);
+
+
         // MISSING RENDERER
-
-        Time timeManager(fixedDeltaTime);
-        int FPScounter = 0;
-
-        #pragma endregion
-
 
         int numberOfNodes = 0;
         int numberOfLayers = 0;
         int numberOfInputNodes = 0;
         int numberOfOutputNodes = 0;
 
+        //Eigen::setNbThreads(4); // (?)
+
+        std::vector<int> sizes = { 3, 4, 5, 3 };
+        
+        Network network(sizes);
+
+        Eigen::VectorXf input(3);
+        input << 0.5f, 0.3f, 0.9f;
+
+        Eigen::VectorXf output = network.forward(input);
+
+        std::cout << "Network output: " << std::endl << output << std::endl;
+
+
+
         // Main loop
         while (!glfwWindowShouldClose(window))
         {
-            #pragma region Rendering / ImGui / Metrics
-
             // Pre-Rendering 
             GLCall(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
             GLCall(glClear(GL_COLOR_BUFFER_BIT));
