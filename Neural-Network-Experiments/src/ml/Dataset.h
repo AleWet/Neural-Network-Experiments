@@ -5,7 +5,6 @@
 #include <sstream>
 #include <iostream>
 #include <random>
-#include "Eigen/Dense"
 
 struct DataSample 
 {
@@ -17,35 +16,35 @@ struct DataSample
 class Dataset 
 {
 private:
-    std::vector<DataSample> m_samples;
-    std::vector<size_t> m_indices;      // For shuffling without moving data
-    size_t m_currentIndex = 0;
-    std::random_device m_rd;            // Random number gen
-    std::mt19937 m_gen;                 // Random number gen
+    std::vector<DataSample> m_Samples;
+    std::vector<size_t> m_Indices;      // For shuffling without moving data
+    size_t m_CurrentIndex = 0;
+    std::random_device m_Rd;            // Random number gen
+    std::mt19937 m_Gen;                 // Random number gen
 
 public:
-    Dataset() : m_gen(m_rd()) {}
+    Dataset() : m_Gen(m_Rd()) {}
 
     // MNIST from CSV (Kaggle version)
     bool loadMNIST_CSV(const std::string& filepath, int maxSamples = -1);
 
     // Data access
-    const DataSample& getSample(size_t index) const { return m_samples[m_indices[index]]; }
+    const DataSample& getSample(size_t index) const { return m_Samples[m_Indices[index]]; }
     const DataSample& getRandomSample();
     const DataSample& getNextSample();     // Sequential access
 
     // Batch operations
     std::vector<DataSample> getBatch(size_t batchSize);
     void shuffle();
-    void reset() { m_currentIndex = 0; } // Reset sequential access
+    void reset() { m_CurrentIndex = 0; } // Reset sequential access
 
     // Info
-    size_t size() const { return m_samples.size(); }
-    bool empty() const { return m_samples.empty(); }
-    int getInputSize() const { return m_samples.empty() ? 0 : m_samples[0].input.size(); }
-    int getOutputSize() const { return m_samples.empty() ? 0 : m_samples[0].target.size(); }
+    size_t size() const { return m_Samples.size(); }
+    bool empty() const { return m_Samples.empty(); }
+    int getInputSize() const { return m_Samples.empty() ? 0 : m_Samples[0].input.size(); }
+    int getOutputSize() const { return m_Samples.empty() ? 0 : m_Samples[0].target.size(); }
 
-    // Get statistics for display
+    // Get number of lables for MNIST
     std::vector<int> getLabelCounts() const;
 
     // Utility

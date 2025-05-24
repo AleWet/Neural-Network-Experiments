@@ -27,7 +27,7 @@
 
 int main(void)
 {
-#pragma region Initialize libraries
+    #pragma region Initialize libraries
 
     // Initialize GLFW
     if (!glfwInit())
@@ -74,9 +74,11 @@ int main(void)
     std::cout << "GLSL Version: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
     std::cout << "ImGui Version : " << ImGui::GetVersion() << std::endl;
 
-#pragma endregion
+    #pragma endregion
 
     { //additional scope to avoid memory leaks
+
+        #pragma region Initialize variables 
 
         // Initialize 
         std::string Basic = "res/shaders/Basic.shader";
@@ -89,34 +91,27 @@ int main(void)
         bool datasetLoaded = false;
         std::string datasetPath = "path/to/mnist_train.csv";
         char pathBuffer[256] = "path/to/mnist_train.csv";
-        int maxSamples = 1000; // Limit for testing
+        int maxSamples = 1000;                // Limit for testing
         int currentSampleIndex = 0;
         bool showSampleViewer = false;
-        int selectedDatasetType = 0; // 0=MNIST for now only this
+        int selectedDatasetType = 0;          // 0=MNIST for now only this
+        float learningRate = 0.01f;
 
-        // Network architecture variables
-        int numberOfLayers = 4; // Total layers including input and output
-        std::vector<int> layerSizes(4); // Vector to store nodes for each layer
-        layerSizes[0] = 784; // Default input size for MNIST
-        layerSizes[1] = 128; // Default first hidden layer
-        layerSizes[2] = 64;  // Default second hidden layer
-        layerSizes[3] = 10;  // Default output size for MNIST
+        int numberOfLayers = 4;               // Total layers including input and output
+        std::vector<int> layerSizes(4);       // Vector to store nodes for each layer
+        layerSizes[0] = 784;                  // Default input size for MNIST
+        layerSizes[1] = 128;                  // Default first hidden layer
+        layerSizes[2] = 64;                   // Default second hidden layer
+        layerSizes[3] = 10;                   // Default output size for MNIST
 
         bool autoConfigureInputOutput = true; // Auto-set input/output based on dataset
         bool networkCreated = false;
+        std::vector<int> sizes = { 1, 1 };
+        Network network(sizes);
 
         //Eigen::setNbThreads(4); // (?)
 
-        std::vector<int> sizes = { 3, 4, 5, 3 };
-
-        Network network(sizes);
-
-        Eigen::VectorXf input(3);
-        input << 0.5f, 0.3f, 0.9f;
-
-        Eigen::VectorXf output = network.forward(input);
-
-        std::cout << "Network output: " << std::endl << output << std::endl;
+        #pragma endregion 
 
         // Main loop
         while (!glfwWindowShouldClose(window))
@@ -128,13 +123,16 @@ int main(void)
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
 
+            #pragma region ImGUI UI
+
             ImGui::Begin("Neural Network Trainer");
 
+            // Network Dataset configuration
             if (ImGui::CollapsingHeader("Dataset", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 // Dataset type selection
-                const char* datasetTypes[] = { "MNIST"}; // ADD MORE IN THE FUTURE
-                ImGui::Combo("Dataset Type", &selectedDatasetType, datasetTypes, 3);
+                const char* datasetTypes[] = { "MNIST" }; // ADD MORE IN THE FUTURE
+                ImGui::Combo("Dataset Type", &selectedDatasetType, datasetTypes, 1);
 
                 if (selectedDatasetType == 0)  // MNIST
                 {
@@ -288,39 +286,7 @@ int main(void)
                 
                 ImGui::Text("Total Parameters: %d", totalParams);
 
-                ImGui::Separator();
-
-                if (ImGui::Button("Create Network"))
-                {
-                    // Auto-configure input/output if enabled and dataset is loaded
-                    if (autoConfigureInputOutput && datasetLoaded)
-                    {
-                        layerSizes[0] = dataset.getInputSize();
-                        layerSizes[numberOfLayers - 1] = dataset.getOutputSize();
-                    }
-
-                    // Create network with current layer configuration
-                    network = Network(layerSizes);
-                    networkCreated = true;
-
-                    std::cout << "Network created with architecture: ";
-                    for (int i = 0; i < numberOfLayers; i++)
-                    {
-                        std::cout << layerSizes[i];
-                        if (i < numberOfLayers - 1) std::cout << " -> ";
-                    }
-                    std::cout << std::endl;
-                    std::cout << "Total parameters: " << totalParams << std::endl;
-                }
-
-                if (networkCreated)
-                {
-                    ImGui::SameLine();
-                    ImGui::TextColored(ImVec4(0, 1, 0, 1), "✓ Network Ready");
-                }
-
                 // Preset buttons for common architectures
-                ImGui::Separator();
                 ImGui::Text("Quick Presets:");
 
                 if (ImGui::Button("Simple (3 layers)"))
@@ -354,12 +320,45 @@ int main(void)
                     layerSizes[2] = 256;
                     layerSizes[3] = datasetLoaded ? dataset.getOutputSize() : 10;
                 }
+
+                if (ImGui::Button("Create Network"))
+                {
+                    // Auto-configure input/output if enabled and dataset is loaded
+                    if (autoConfigureInputOutput && datasetLoaded)
+                    {
+                        layerSizes[0] = dataset.getInputSize();
+                        layerSizes[numberOfLayers - 1] = dataset.getOutputSize();
+                    }
+
+                    // Create network with current layer configuration
+                    network = Network(layerSizes);
+                    networkCreated = true;
+
+                    std::cout << "Network created with architecture: ";
+                    for (int i = 0; i < numberOfLayers; i++)
+                    {
+                        std::cout << layerSizes[i];
+                        if (i < numberOfLayers - 1) std::cout << " -> ";
+                    }
+                    std::cout << std::endl;
+                    std::cout << "Total parameters: " << totalParams << std::endl;
+                }
+
+                if (networkCreated)
+                {
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(0, 1, 0, 1), "Network Ready");
+                }
+
+                
             }
 
-            // Training section
+            // Training section TO BE REVISED 
             if (ImGui::CollapsingHeader("Training"))
             {
                 ImGui::Button("Select activation function (TBD)");
+
+                ImGui::SliderFloat("Learning Rate", &learningRate, 0.0f, 1.0f);
 
                 if (datasetLoaded && networkCreated)
                 {
@@ -439,6 +438,8 @@ int main(void)
 
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+            #pragma endregion 
 
             glfwSwapBuffers(window);
             glfwPollEvents();

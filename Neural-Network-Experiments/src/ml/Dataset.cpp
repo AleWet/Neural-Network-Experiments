@@ -11,7 +11,7 @@ bool Dataset::loadMNIST_CSV(const std::string& filepath, int maxSamples)
         return false;
     }
 
-    m_samples.clear();
+    m_Samples.clear();
     std::string line;
     int samplesLoaded = 0;
 
@@ -66,7 +66,7 @@ bool Dataset::loadMNIST_CSV(const std::string& filepath, int maxSamples)
         // Create one-hot encoded target
         sample.target = oneHotEncode(sample.label, 10);
 
-        m_samples.push_back(sample);
+        m_Samples.push_back(sample);
         samplesLoaded++;
 
         if (samplesLoaded % 1000 == 0) 
@@ -76,23 +76,23 @@ bool Dataset::loadMNIST_CSV(const std::string& filepath, int maxSamples)
     file.close();
 
     // Initialize indices for shuffling
-    m_indices.resize(m_samples.size());
-    std::iota(m_indices.begin(), m_indices.end(), 0);
+    m_Indices.resize(m_Samples.size());
+    std::iota(m_Indices.begin(), m_Indices.end(), 0);
 
-    std::cout << "Successfully loaded " << m_samples.size() << " MNIST samples." << std::endl;
+    std::cout << "Successfully loaded " << m_Samples.size() << " MNIST samples." << std::endl;
     return true;
 }
 
 const DataSample& Dataset::getRandomSample() 
 {
-    std::uniform_int_distribution<size_t> dis(0, m_samples.size() - 1);
-    return m_samples[m_indices[dis(m_gen)]];
+    std::uniform_int_distribution<size_t> dis(0, m_Samples.size() - 1);
+    return m_Samples[m_Indices[dis(m_Gen)]];
 }
 
 const DataSample& Dataset::getNextSample() 
 {
-    const DataSample& sample = m_samples[m_indices[m_currentIndex]];
-    m_currentIndex = (m_currentIndex + 1) % m_samples.size();
+    const DataSample& sample = m_Samples[m_Indices[m_CurrentIndex]];
+    m_CurrentIndex = (m_CurrentIndex + 1) % m_Samples.size();
     return sample;
 }
 
@@ -101,7 +101,7 @@ std::vector<DataSample> Dataset::getBatch(size_t batchSize)
     std::vector<DataSample> batch;
     batch.reserve(batchSize);
 
-    for (size_t i = 0; i < batchSize && i < m_samples.size(); i++) 
+    for (size_t i = 0; i < batchSize && i < m_Samples.size(); i++) 
     {
         batch.push_back(getNextSample());
     }
@@ -111,14 +111,14 @@ std::vector<DataSample> Dataset::getBatch(size_t batchSize)
 
 void Dataset::shuffle() 
 {
-    std::shuffle(m_indices.begin(), m_indices.end(), m_gen);
-    m_currentIndex = 0;
+    std::shuffle(m_Indices.begin(), m_Indices.end(), m_Gen);
+    m_CurrentIndex = 0;
 }
 
 std::vector<int> Dataset::getLabelCounts() const 
 {
-    std::vector<int> counts(10, 0); // Max 10 classes (what?)
-    for (const auto& sample : m_samples) 
+    std::vector<int> counts(10, 0); 
+    for (const auto& sample : m_Samples) 
     {
         if (sample.label >= 0 && sample.label < 10) 
             counts[sample.label]++;
