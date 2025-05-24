@@ -28,6 +28,7 @@
     <ClCompile Include="src\graphics\Texture.cpp" />
     <ClCompile Include="src\graphics\VertexArray.cpp" />
     <ClCompile Include="src\graphics\VertexBuffer.cpp" />
+    <ClCompile Include="src\ml\Dataset.cpp" />
     <ClCompile Include="src\ml\Network.cpp" />
     <ClCompile Include="src\Utils.cpp" />
     <ClCompile Include="src\vendor\glm\detail\glm.cpp" />
@@ -50,6 +51,7 @@
     <ClInclude Include="src\graphics\VertexArray.h" />
     <ClInclude Include="src\graphics\VertexBuffer.h" />
     <ClInclude Include="src\graphics\VertexBufferLayout.h" />
+    <ClInclude Include="src\ml\Dataset.h" />
     <ClInclude Include="src\ml\Network.h" />
     <ClInclude Include="src\Utils.h" />
     <ClInclude Include="src\vendor\Eigen\src\Cholesky\LDLT.h" />

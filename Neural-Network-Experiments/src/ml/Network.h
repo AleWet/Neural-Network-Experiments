@@ -21,16 +21,21 @@ public:
 	// Advance the input in the simulation
 	Eigen::VectorXf forward(const Eigen::VectorXf& input);
 
+	void BackPropagation(const Eigen::VectorXf& batchExpectedOutput)
+	{
+
+	}
+
 	// Setters
 	void setWeights(int layerIndex, const Eigen::MatrixXf& newWeights)
 	{
-		if (layerIndex > 0 && layerIndex < m_Weigths.size())
+		if (layerIndex >= 0 && layerIndex <= m_Weigths.size())
 			m_Weigths[layerIndex] = newWeights;
 		
 	}
 	void setBiases(int layerIndex, const Eigen::VectorXf& newBiases)
 	{
-		if (layerIndex > 0 && layerIndex < m_Biases.size()) 
+		if (layerIndex >= 0 && layerIndex <= m_Biases.size()) 
 			m_Biases[layerIndex] = newBiases;
 		
 	}
