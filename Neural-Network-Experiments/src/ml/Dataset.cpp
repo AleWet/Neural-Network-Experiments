@@ -1,6 +1,5 @@
 #include "Dataset.h"
-#include <algorithm>
-#include <numeric>
+
 
 bool Dataset::loadMNIST_CSV(const std::string& filepath, int maxSamples) 
 {

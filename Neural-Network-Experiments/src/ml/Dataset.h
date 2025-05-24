@@ -5,6 +5,9 @@
 #include <sstream>
 #include <iostream>
 #include <random>
+#include <algorithm>
+#include <numeric>
+#include "Eigen/Dense"
 
 struct DataSample 
 {

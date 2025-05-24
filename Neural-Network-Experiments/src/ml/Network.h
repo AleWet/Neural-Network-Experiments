@@ -1,8 +1,6 @@
 #pragma once
-#include <vector>
-#include <string>
 #include "Dataset.h"
-#include "Eigen/Dense"
+
 
 class Network
 {
