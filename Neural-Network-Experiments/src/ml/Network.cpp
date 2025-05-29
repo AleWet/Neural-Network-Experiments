@@ -99,7 +99,93 @@ void Network::BackPropagation(const Eigen::VectorXf& input, const Eigen::VectorX
 
 void Network::TrainBatch(const std::vector<DataSample>& batch, float learningRate)
 {
-	// TBD
+	if (batch.empty()) return;
+
+	// Initialize cumulative gradients	
+	std::vector<Eigen::MatrixXf> WeightGradients(m_Weights.size());
+	std::vector<Eigen::VectorXf> BiasGradients(m_Biases.size());
+	for (size_t i = 0; i < m_Weights.size(); i++) 
+	{
+		WeightGradients[i] = Eigen::MatrixXf::Zero(m_Weights[i].rows(), m_Weights[i].cols());
+		BiasGradients[i] = Eigen::VectorXf::Zero(m_Biases[i].size());
+	}
+
+	for (const auto& sample : batch) {
+		// Calculate deltas (same as in BackPropagation)
+		int numLayers = m_LayerSizes.size();
+		int outputLayerIndex = numLayers - 1;
+
+		Eigen::VectorXf outputError = m_Activations[outputLayerIndex] - sample.target;
+		m_Deltas[outputLayerIndex] = outputError.cwiseProduct(
+			ActivationFunctionDerivative(m_PreActivations[outputLayerIndex])
+		);
+
+		for (int layer = outputLayerIndex - 1; layer >= 1; layer--) 
+		{
+			m_Deltas[layer] = (m_Weights[layer].transpose() * m_Deltas[layer + 1]).cwiseProduct(
+				ActivationFunctionDerivative(m_PreActivations[layer])
+			);
+		}
+
+		// Accumulate gradients instead of updating the weigths and biases immediately
+		for (int layer = 0; layer < numLayers - 1; layer++) 
+		{
+			WeightGradients[layer] += m_Deltas[layer + 1] * m_Activations[layer].transpose();
+			BiasGradients[layer] += m_Deltas[layer + 1];
+		}
+	}
+
+	// Update parameters
+	float batchSize = static_cast<float>(batch.size());
+	for (size_t layer = 0; layer < m_Weights.size(); layer++) 
+	{
+		m_Weights[layer] -= learningRate * WeightGradients[layer] / batchSize;
+		m_Biases[layer] -= learningRate * BiasGradients[layer] / batchSize;
+	}
+}
+
+// Not the most optimal implementation but it's easy and it works
+float Network::CalculateAccuracy(const std::vector<DataSample>& testBatch) 
+{
+	if (testBatch.empty()) return 0.0f;
+
+	int correct = 0;
+	for (const auto& sample : testBatch) 
+	{
+		Eigen::VectorXf output = Forward(sample.input);
+
+		// Find predicted class (highest output)
+		int predicted = 0;
+		float maxOutput = output[0];
+		for (int i = 1; i < output.size(); i++) 
+		{
+			if (output[i] > maxOutput) 
+			{
+				maxOutput = output[i];
+				predicted = i;
+			}
+		}
+
+		if (predicted == sample.label) 
+			correct++;
+	}
+
+	return static_cast<float>(correct) / static_cast<float>(testBatch.size());
+}
+
+// Not the most optimal implementation but it's easy and it works
+float Network::CalculateAverageLoss(const std::vector<DataSample>& testBatch) 
+{
+	if (testBatch.empty()) return -1.0f;
+
+	float totalLoss = 0.0f;
+	for (const auto& sample : testBatch) 
+	{
+		Eigen::VectorXf output = Forward(sample.input);
+		totalLoss += LossFunction(output, sample.target);
+	}
+
+	return totalLoss / static_cast<float>(testBatch.size());
 }
 
 // FOR THE MOMENT ONLY SIGMOID 

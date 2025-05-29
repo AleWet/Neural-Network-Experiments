@@ -10,7 +10,7 @@ private:
 	std::vector<Eigen::VectorXf> m_Biases;
 	std::vector<Eigen::VectorXf> m_Activations;	   // a = actFun(Z)
 	std::vector<Eigen::VectorXf> m_PreActivations; // z
-	
+
 	// For backpropagation
 	std::vector<Eigen::MatrixXf> m_WeightGradients;
 	std::vector<Eigen::VectorXf> m_BiasGradients;
@@ -23,7 +23,7 @@ private:
 	// Theoretical loss/cost function : 
 	//		INPUT = output del network su N samples (one batch), BIASES and WEIGHTS of the network
 	//		OUTPUT = (somma di tutti (output - expected)^2) * 1/N  
- 	float LossFunction(const Eigen::VectorXf& output, const Eigen::VectorXf& target);
+	float LossFunction(const Eigen::VectorXf& output, const Eigen::VectorXf& target);
 
 public:
 	Network(const std::vector<int>& sizes);
@@ -39,13 +39,13 @@ public:
 	{
 		if (layerIndex >= 0 && layerIndex <= m_Weights.size())
 			m_Weights[layerIndex] = newWeights;
-		
+
 	}
 	void setBiases(int layerIndex, const Eigen::VectorXf& newBiases)
 	{
-		if (layerIndex >= 0 && layerIndex <= m_Biases.size()) 
+		if (layerIndex >= 0 && layerIndex <= m_Biases.size())
 			m_Biases[layerIndex] = newBiases;
-		
+
 	}
 
 	// Getters
@@ -55,7 +55,7 @@ public:
 	const Eigen::VectorXf& getBiases(int layerIndex) const { return m_Biases[layerIndex]; }
 
 	// Get activation levels output
-	Eigen::VectorXf getLayerOutput(int layerIndex) const 
+	Eigen::VectorXf getLayerOutput(int layerIndex) const
 	{
 		if (layerIndex >= 0 && layerIndex < m_Activations.size()) {
 			return m_Activations[layerIndex];
@@ -63,5 +63,9 @@ public:
 		return Eigen::VectorXf();
 	}
 
+	// Same as backProp but with a batch of input data to approximate Cost()
 	void TrainBatch(const std::vector<DataSample>& batch, float learningRate);
+
+	float CalculateAccuracy(const std::vector<DataSample>& testBatch);
+	float CalculateAverageLoss(const std::vector<DataSample>& testBatch);
 };

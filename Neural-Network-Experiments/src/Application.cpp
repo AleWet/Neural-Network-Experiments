@@ -104,6 +104,14 @@ int main(void)
         layerSizes[2] = 64;                   // Default second hidden layer
         layerSizes[3] = 10;                   // Default output size for MNIST
 
+        // Training parameters
+        static int batchSize = 32;
+        static int epochs = 10;
+        static bool isTraining = false;
+        static int currentEpoch = 0;
+        static float currentLoss = 0.0f;
+        static float currentAccuracy = 0.0f;
+
         bool autoConfigureInputOutput = true; // Auto-set input/output based on dataset
         bool networkCreated = false;
         std::vector<int> sizes = { 1, 1 };
@@ -358,26 +366,104 @@ int main(void)
             if (ImGui::CollapsingHeader("Training"))
             {
                 ImGui::Button("Select activation function (TBD)");
+                ImGui::SliderFloat("Learning Rate", &learningRate, 0.001f, 0.1f);
 
-                ImGui::SliderFloat("Learning Rate", &learningRate, 0.0f, 1.0f);
+                ImGui::InputInt("Batch Size", &batchSize);
+                if (batchSize < 1) batchSize = 1;
+                if (batchSize > maxSamples) batchSize = maxSamples;
+
+                ImGui::InputInt("Epochs", &epochs);
+                if (epochs < 1) epochs = 1;
+
+                if (datasetLoaded && networkCreated && !isTraining)
+                {
+                    if (ImGui::Button("Start Training"))
+                    {
+                        isTraining = true;
+                        currentEpoch = 0;
+                        std::cout << "Starting training with " << epochs << " epochs, batch size " << batchSize << std::endl;
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Train Single Batch"))
+                    {
+                        auto batch = dataset.getBatch(batchSize);
+                        network.TrainBatch(batch, learningRate);
+
+                        // Metrics
+                        currentLoss = network.CalculateAverageLoss(batch);
+                        currentAccuracy = network.CalculateAccuracy(batch);
+
+                        std::cout << "Single batch training completed. Loss: " << currentLoss
+                            << ", Accuracy: " << (currentAccuracy * 100.0f) << "%" << std::endl;
+                    }
+                }
+                else if (isTraining)
+                {
+                    // TO BE REVISED IN THE FUTURE -> make it train on the first x% of the samples and then present new samples that it has never seen before
+                    if (currentEpoch < epochs)
+                    {
+                        dataset.shuffle();
+
+                        // Batches training
+                        int numBatches = (dataset.size() + batchSize - 1) / batchSize;
+                        float epochLoss = 0.0f;
+                        float epochAccuracy = 0.0f;
+
+                        for (int batch = 0; batch < numBatches; batch++)
+                        {
+                            auto batchData = dataset.getBatch(batchSize);
+                            network.TrainBatch(batchData, learningRate);
+
+                            epochLoss += network.CalculateAverageLoss(batchData);
+                            epochAccuracy += network.CalculateAccuracy(batchData);
+                        }
+
+                        currentLoss = epochLoss / numBatches;
+                        currentAccuracy = epochAccuracy / numBatches;
+                        currentEpoch++;
+
+                        std::cout << "Epoch " << currentEpoch << "/" << epochs
+                            << " - Loss: " << currentLoss
+                            << ", Accuracy: " << (currentAccuracy * 100.0f) << "%" << std::endl;
+
+                        if (currentEpoch >= epochs)
+                        {
+                            isTraining = false;
+                            std::cout << "Training completed!" << std::endl;
+                        }
+                    }
+
+                    if (ImGui::Button("Stop Training"))
+                    {
+                        isTraining = false;
+                        std::cout << "Training stopped by user." << std::endl;
+                    }
+                }
 
                 if (datasetLoaded && networkCreated)
                 {
-                    if (ImGui::Button("Start Learning"))
-                    {
-                        std::cout << "Training would start here..." << std::endl;
-                        // TODO: Implement backpropagation training
-                    }
-
-                    if (ImGui::Button("Test Single Sample (forward and backworks pass"))
+                    if (ImGui::Button("Test Single Sample"))
                     {
                         const DataSample& sample = dataset.getRandomSample();
-                        network.BackPropagation(sample.input, sample.target, learningRate);
-                        Eigen::VectorXf output = network.getLayerOutput(numberOfLayers - 1);
+                        Eigen::VectorXf output = network.Forward(sample.input);
 
                         std::cout << "Input label: " << sample.label << std::endl;
                         std::cout << "Network output: " << std::endl << output.transpose() << std::endl;
                         std::cout << "Expected output: " << std::endl << sample.target.transpose() << std::endl;
+
+                        // Find predicted class
+                        int predicted = 0;
+                        float maxOutput = output[0];
+                        for (int i = 1; i < output.size(); i++) 
+                        {
+                            if (output[i] > maxOutput) 
+                            {
+                                maxOutput = output[i];
+                                predicted = i;
+                            }
+                        }
+                        std::cout << "Predicted class: " << predicted << std::endl;
                     }
 
                     if (ImGui::Button("Shuffle Dataset"))
@@ -385,6 +471,17 @@ int main(void)
                         dataset.shuffle();
                         std::cout << "Dataset shuffled." << std::endl;
                     }
+
+                    // Display current metrics
+                    ImGui::Separator();
+                    ImGui::Text("Training Progress:");
+                    if (isTraining) 
+                    {
+                        ImGui::Text("Epoch: %d/%d", currentEpoch, epochs);
+                        ImGui::ProgressBar(static_cast<float>(currentEpoch) / static_cast<float>(epochs));
+                    }
+                    ImGui::Text("Current Loss: %.6f", currentLoss);
+                    ImGui::Text("Current Accuracy: %.2f%%", currentAccuracy * 100.0f);
                 }
                 else if (!datasetLoaded)
                 {
