@@ -30,7 +30,7 @@ public:
 	~Network();
 
 	// Advance the input in the simulation
-	Eigen::VectorXf forward(const Eigen::VectorXf& input);
+	Eigen::VectorXf Forward(const Eigen::VectorXf& input);
 
 	void BackPropagation(const Eigen::VectorXf& input, const Eigen::VectorXf& target, float learningRate);
 

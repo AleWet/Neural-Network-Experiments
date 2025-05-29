@@ -187,7 +187,8 @@ int main(void)
                 }
                 else
                 {
-                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "No dataset loaded");
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "No dataset loaded");
                 }
             }
 
@@ -368,10 +369,11 @@ int main(void)
                         // TODO: Implement backpropagation training
                     }
 
-                    if (ImGui::Button("Test Single Sample"))
+                    if (ImGui::Button("Test Single Sample (forward and backworks pass"))
                     {
                         const DataSample& sample = dataset.getRandomSample();
-                        Eigen::VectorXf output = network.forward(sample.input);
+                        network.BackPropagation(sample.input, sample.target, learningRate);
+                        Eigen::VectorXf output = network.getLayerOutput(numberOfLayers - 1);
 
                         std::cout << "Input label: " << sample.label << std::endl;
                         std::cout << "Network output: " << std::endl << output.transpose() << std::endl;

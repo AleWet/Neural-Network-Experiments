@@ -1,4 +1,4 @@
-#include "Network.h"
+﻿#include "Network.h"
 
 Network::Network(const std::vector<int>& sizes)
 	:m_LayerSizes(sizes)
@@ -33,7 +33,7 @@ Network::~Network()
 {
 }
 
-Eigen::VectorXf Network::forward(const Eigen::VectorXf& input)
+Eigen::VectorXf Network::Forward(const Eigen::VectorXf& input)
 {
 	m_Activations[0] = input;
 	m_PreActivations[0] = input;
@@ -50,11 +50,55 @@ Eigen::VectorXf Network::forward(const Eigen::VectorXf& input)
 
 void Network::BackPropagation(const Eigen::VectorXf& input, const Eigen::VectorXf& target, float learningRate)
 {
-	// Assume you have already called Forward() AND that you have already calculated the deltas for the current batch
+	// TRANSCRIBE WRITTEN NOTES ONTO OBSIDIAN
 
+	Forward(input);
 	int numLayers = m_LayerSizes.size();
 	int outputLayerIndex = numLayers - 1;
 
+	// Initialize gradients to 0
+	for (size_t i = 0; i < m_WeightGradients.size(); i++) 
+	{
+		m_WeightGradients[i] = Eigen::MatrixXf::Zero(m_Weights[i].rows(), m_Weights[i].cols());
+		m_BiasGradients[i] = Eigen::VectorXf::Zero(m_Biases[i].size());
+	}
+
+	// Error = ∂C(network) / ∂z
+
+	// Calculate output layer error : C'(a) ⊙ σ'(z)
+	Eigen::VectorXf outputError = m_Activations[outputLayerIndex] - target;
+	m_Deltas[outputLayerIndex] = outputError.cwiseProduct(
+		ActivationFunctionDerivative(m_PreActivations[outputLayerIndex])
+	);
+
+	// Propagate the error backwords 
+	for (int layer = outputLayerIndex - 1; layer >= 1; layer--) {
+		// error for any layer : (W^T * delta_next) ⊙ σ'(z)
+		m_Deltas[layer] = (m_Weights[layer].transpose() * m_Deltas[layer + 1]).cwiseProduct(
+			ActivationFunctionDerivative(m_PreActivations[layer])
+		);
+	}
+
+	// Calculate gradients for weigths and biases (you needed ∂C(network) / ∂z)
+	for (int layer = 0; layer < numLayers - 1; layer++) {
+		// W gradient = error * activation^(L-1) -> you also need to transpose for dimension reasons 
+		m_WeightGradients[layer] = m_Deltas[layer + 1] * m_Activations[layer].transpose();
+
+		// B gradient = error
+		m_BiasGradients[layer] = m_Deltas[layer + 1];
+	}
+
+	// Update network with the components of the gradient of the Cost() 
+	for (size_t layer = 0; layer < m_Weights.size(); layer++) 
+	{
+		m_Weights[layer] -= learningRate * m_WeightGradients[layer];
+		m_Biases[layer] -= learningRate * m_BiasGradients[layer];
+	}
+
+}
+
+void Network::TrainBatch(const std::vector<DataSample>& batch, float learningRate)
+{
 	// TBD
 }
 
@@ -77,10 +121,6 @@ float Network::LossFunction(const Eigen::VectorXf& output, const Eigen::VectorXf
 	return 0.5f * diff.dot(diff);				// sum of squared differences (I don't know why online it's * 0.5 yet)
 }
 
-void Network::TrainBatch(const std::vector<DataSample>& batch, float learningRate) 
-{
-	// TBD
-}
 
 
 
