@@ -147,6 +147,8 @@ int main(void)
 
             #pragma region ImGUI UI
 
+            #pragma region MAIN WINDOW
+
             ImGui::Begin("Neural Network Trainer");
 
             // Network Dataset configuration
@@ -488,6 +490,10 @@ int main(void)
 
             ImGui::End();
 
+            #pragma endregion
+
+            #pragma region SECONDARY WINDOWS
+
             // Sample Viewer (separate window) I FORGOT WHY IT'S RED I HAVE TO FIND OUT AGAIN
             if (showSampleViewer && datasetLoaded && selectedDatasetType == 0) 
             {
@@ -782,6 +788,8 @@ int main(void)
 
                 ImGui::End();
             }
+
+            #pragma endregion
             
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
