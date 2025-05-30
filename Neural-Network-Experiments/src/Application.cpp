@@ -1,7 +1,4 @@
-﻿#include <GL/glew.h>
-#include <GLFW/glfw3.h>
-
-#include <iostream>
+﻿#include <iostream>
 #include <vector>
 #include <fstream>
 #include <string>
@@ -123,6 +120,11 @@ int main(void)
         std::vector<float> epochNumbers;
         bool showMetricsWindow = false;
         int maxHistorySize = 1000; // Limit history to prevent memory issues
+
+        // Sample rendering
+        unsigned int mnistTexture = 0;
+        bool textureNeedsUpdate = true;
+        int lastDisplayedSample = -1;
 
         bool autoConfigureInputOutput = true; // Auto-set input/output based on dataset
         bool networkCreated = false;
@@ -486,43 +488,99 @@ int main(void)
 
             ImGui::End();
 
-            // Sample Viewer (separate window)
-            if (showSampleViewer && datasetLoaded && selectedDatasetType == 0) // Only for MNIST
+            // Sample Viewer (separate window) I FORGOT WHY IT'S RED I HAVE TO FIND OUT AGAIN
+            if (showSampleViewer && datasetLoaded && selectedDatasetType == 0) 
             {
                 ImGui::Begin("MNIST Sample Viewer", &showSampleViewer);
-
                 ImGui::SliderInt("Sample Index", &currentSampleIndex, 0, dataset.size() - 1);
 
                 const DataSample& sample = dataset.getSample(currentSampleIndex);
                 ImGui::Text("Label: %d", sample.label);
 
-                // Display 28x28 
-                static std::vector<float> imageData(784);
-                for (int i = 0; i < 784; i++)
-                    imageData[i] = sample.input[i];
-
-                ImGui::Text("28x28 Image (ASCII representation):");
-                for (int row = 0; row < 28; row++)
+                // Update texture if sample changed
+                if (currentSampleIndex != lastDisplayedSample) 
                 {
-                    std::string line = "";
-                    for (int col = 0; col < 28; col++)
-                    {
-                        float pixel = imageData[row * 28 + col];
-                        if (pixel > 0.7f) line += "O";
-                        else if (pixel > 0.4f) line += "o";
-                        else if (pixel > 0.1f) line += ".";
-                        else line += "  ";
-                    }
-                    ImGui::Text("%s", line.c_str());
+                    std::vector<float> imageData(784);
+                    for (int i = 0; i < 784; i++) 
+                        imageData[i] = sample.input[i];
+
+                    UpdateMNISTTexture(mnistTexture, imageData);
+                    lastDisplayedSample = currentSampleIndex;
                 }
 
-                if (ImGui::Button("Next Sample"))
-                    currentSampleIndex = (currentSampleIndex + 1) % dataset.size();
+                // Display image
+                if (mnistTexture != 0) 
+                {
+                    // Calculate display size 
+                    float imageScale = 8.0f; // Adjust this value to change size
+                    ImVec2 imageSize(28 * imageScale, 28 * imageScale);
 
-                ImGui::SameLine();
-                if (ImGui::Button("Previous Sample"))
+                    ImGui::Text("MNIST Image (28x28 pixels):");
+                    ImGui::Image((ImTextureID)mnistTexture, imageSize);
+                }
+
+                // Network prediction display 
+                if (networkCreated && !isTraining) 
+                {
+                    ImGui::Separator();
+                    ImGui::Text("Network Prediction:");
+
+                    // Predicted class
+                    auto prediction = network.Forward(sample.input);
+                    int predictedClass = 0;
+                    float maxProb = prediction[0];
+                    for (int i = 1; i < prediction.size(); i++) 
+                    {
+                        if (prediction[i] > maxProb) 
+                        {
+                            maxProb = prediction[i];
+                            predictedClass = i;
+                        }
+                    }
+
+                    // Display 
+                    ImVec4 predictionColor = (predictedClass == sample.label) ?
+                        ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1); // Green if correct, red if wrong
+
+                    ImGui::TextColored(predictionColor, "Predicted: %d (%.2f%% confidence)",
+                        predictedClass, maxProb * 100.0f);
+
+                    if (predictedClass == sample.label) {
+                        ImGui::TextColored(ImVec4(0, 1, 0, 1), "Correct");
+                    }
+                    else {
+                        ImGui::TextColored(ImVec4(1, 0, 0, 1), "Incorrect (actual: %d)", sample.label);
+                    }
+
+                    // Show all class probabilities as a bar chart
+                    ImGui::Text("Class Probabilities:");
+                    for (int i = 0; i < 10; i++) 
+                    {
+                        float prob = prediction[i];
+                        ImVec4 barColor = (i == sample.label) ? ImVec4(0, 1, 0, 0.7f) : ImVec4(0.5f, 0.5f, 0.5f, 0.7f);
+
+                        ImGui::Text("%d:", i);
+                        ImGui::SameLine();
+                        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, barColor);
+                        ImGui::ProgressBar(prob, ImVec2(-1, 0), "");
+                        ImGui::PopStyleColor();
+                        ImGui::SameLine();
+                        ImGui::Text("%.3f", prob);
+                    }
+                }
+
+                // Buttons Nav
+                if (ImGui::Button("Previous Sample")) 
                     currentSampleIndex = (currentSampleIndex - 1 + dataset.size()) % dataset.size();
-
+               
+                ImGui::SameLine();
+                if (ImGui::Button("Next Sample")) 
+                    currentSampleIndex = (currentSampleIndex + 1) % dataset.size();
+                
+                ImGui::SameLine();
+                if (ImGui::Button("Random Sample")) 
+                    currentSampleIndex = rand() % dataset.size();
+                
                 ImGui::End();
             }
 
@@ -646,7 +704,7 @@ int main(void)
                         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
                         ImGui::TableHeadersRow();
 
-                        // Current Metrics
+                        // LOSS
                         ImGui::TableNextRow();
                         ImGui::TableSetColumnIndex(0);
                         ImGui::Text("Current Loss");
@@ -655,11 +713,18 @@ int main(void)
 
                         ImGui::TableNextRow();
                         ImGui::TableSetColumnIndex(0);
+                        ImGui::Text("Lowest Loss");
+                        ImGui::TableSetColumnIndex(1);
+                        float lowestLoss = *std::min_element(lossHistory.begin(), lossHistory.end());
+                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%.6f", lowestLoss);
+
+                        // ACCURACY
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
                         ImGui::Text("Current Accuracy");
                         ImGui::TableSetColumnIndex(1);
                         ImGui::TextColored(accuracyColor, "%.2f%%", accuracyHistory.back() * 100.0f);
 
-                        // Best metrics
                         ImGui::TableNextRow();
                         ImGui::TableSetColumnIndex(0);
                         ImGui::Text("Best Accuracy");
@@ -667,19 +732,9 @@ int main(void)
                         float bestAccuracy = *std::max_element(accuracyHistory.begin(), accuracyHistory.end());
                         ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%.2f%%", bestAccuracy * 100.0f);
 
-                        ImGui::TableNextRow();
-                        ImGui::TableSetColumnIndex(0);
-                        ImGui::Text("Lowest Loss");
-                        ImGui::TableSetColumnIndex(1);
-                        float lowestLoss = *std::min_element(lossHistory.begin(), lossHistory.end());
-                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%.6f", lowestLoss);
-
                         // Progress info
                         ImGui::TableNextRow();
                         ImGui::TableSetColumnIndex(0);
-                        ImGui::Text("Data Points");
-                        ImGui::TableSetColumnIndex(1);
-                        ImGui::Text("%zu", lossHistory.size());
 
                         ImGui::TableNextRow();
                         ImGui::TableSetColumnIndex(0);
@@ -727,6 +782,7 @@ int main(void)
 
                 ImGui::End();
             }
+            
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -735,6 +791,8 @@ int main(void)
             glfwSwapBuffers(window);
             glfwPollEvents();
         }
+        if (mnistTexture != 0)
+            glDeleteTextures(1, &mnistTexture);
     }
 
     // Cleanup
