@@ -112,6 +112,9 @@ void Network::TrainBatch(const std::vector<DataSample>& batch, float learningRat
 
 	for (const auto& sample : batch) {
 		// Calculate deltas (same as in BackPropagation)
+
+		Forward(sample.input); // I really forgot this line
+
 		int numLayers = m_LayerSizes.size();
 		int outputLayerIndex = numLayers - 1;
 
@@ -135,7 +138,7 @@ void Network::TrainBatch(const std::vector<DataSample>& batch, float learningRat
 		}
 	}
 
-	// Update parameters
+	// Update parameters after batch is completed
 	float batchSize = static_cast<float>(batch.size());
 	for (size_t layer = 0; layer < m_Weights.size(); layer++) 
 	{
@@ -204,7 +207,7 @@ Eigen::VectorXf Network::ActivationFunctionDerivative(const Eigen::VectorXf& x)
 float Network::LossFunction(const Eigen::VectorXf& output, const Eigen::VectorXf& target)
 {
 	Eigen::VectorXf diff = output - target;
-	return 0.5f * diff.dot(diff);				// sum of squared differences (I don't know why online it's * 0.5 yet)
+	return 0.5f * diff.dot(diff);				// sum of squared differences (I don't know why online it's * 0.5 yet it was on the book)
 }
 
 

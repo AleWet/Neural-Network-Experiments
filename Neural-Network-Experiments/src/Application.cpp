@@ -94,6 +94,7 @@ int main(void)
         int maxSamples = 1000;                // Limit for testing
         int currentSampleIndex = 0;
         bool showSampleViewer = false;
+        bool showTrainingSampleViewer = true; // DEBUGGING, will be false and have a separate setter in the UI
         int selectedDatasetType = 0;          // 0=MNIST for now only this
         float learningRate = 0.01f;
 
@@ -113,7 +114,7 @@ int main(void)
         static float currentAccuracy = 0.0f;
 
         bool autoConfigureInputOutput = true; // Auto-set input/output based on dataset
-        bool networkCreated = false;
+        bool networkCreated = false; 
         std::vector<int> sizes = { 1, 1 };
         Network network(sizes);
 
@@ -366,7 +367,7 @@ int main(void)
             if (ImGui::CollapsingHeader("Training"))
             {
                 ImGui::Button("Select activation function (TBD)");
-                ImGui::SliderFloat("Learning Rate", &learningRate, 0.001f, 0.1f);
+                ImGui::SliderFloat("Learning Rate", &learningRate, 0.001f, 5.0f);
 
                 ImGui::InputInt("Batch Size", &batchSize);
                 if (batchSize < 1) batchSize = 1;
@@ -443,7 +444,7 @@ int main(void)
 
                 if (datasetLoaded && networkCreated)
                 {
-                    if (ImGui::Button("Test Single Sample"))
+                    if (ImGui::Button("Test Single Sample")) // ADD BUTTON TO TEST NEW SAMPLES INSTEAD OF RANDOM ONES
                     {
                         const DataSample& sample = dataset.getRandomSample();
                         Eigen::VectorXf output = network.Forward(sample.input);
@@ -533,6 +534,17 @@ int main(void)
                     currentSampleIndex = (currentSampleIndex - 1 + dataset.size()) % dataset.size();
 
                 ImGui::End(); 
+            }
+
+            // Training batch viewer (separate window)
+            if (showTrainingSampleViewer && datasetLoaded && selectedDatasetType == 0) // Only for MNIST
+            {
+                ImGui::Begin("MNIST Training Sample Viewer", &showSampleViewer);
+
+                // RENDER CURRENT SAMPLE BATCH AND LET USER CHOOSE ONE TRAINING SAMPLE TO TEST THE NETWORK 
+                // TBD
+
+                ImGui::End();
             }
 
             ImGui::Render();
