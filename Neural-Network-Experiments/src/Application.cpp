@@ -24,6 +24,9 @@
 #include "vendor/imgui/imgui.h"
 #include "vendor/imgui/imgui_impl_glfw.h"
 #include "vendor/imgui/imgui_impl_opengl3.h"
+#include "vendor/imgui/implot.h"
+#include "vendor/imgui/implot_internal.h"
+
 
 int main(void)
 {
@@ -64,6 +67,7 @@ int main(void)
     // ImGui stuff
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -78,7 +82,7 @@ int main(void)
 
     { //additional scope to avoid memory leaks
 
-        #pragma region Initialize variables 
+    #pragma region Initialize variables 
 
         // Initialize 
         std::string Basic = "res/shaders/Basic.shader";
@@ -113,8 +117,15 @@ int main(void)
         static float currentLoss = 0.0f;
         static float currentAccuracy = 0.0f;
 
+        // Metrics
+        std::vector<float> lossHistory;
+        std::vector<float> accuracyHistory;
+        std::vector<float> epochNumbers;
+        bool showMetricsWindow = false;
+        int maxHistorySize = 1000; // Limit history to prevent memory issues
+
         bool autoConfigureInputOutput = true; // Auto-set input/output based on dataset
-        bool networkCreated = false; 
+        bool networkCreated = false;
         std::vector<int> sizes = { 1, 1 };
         Network network(sizes);
 
@@ -235,7 +246,6 @@ int main(void)
                     }
                 }
 
-                ImGui::Separator();
                 ImGui::Text("Layer Configuration:");
 
                 // Display input fields for each layer
@@ -293,7 +303,7 @@ int main(void)
                 int totalParams = 0;
                 for (int i = 1; i < numberOfLayers; i++)
                     totalParams += layerSizes[i - 1] * layerSizes[i] + layerSizes[i]; // weights + biases
-                
+
                 ImGui::Text("Total Parameters: %d", totalParams);
 
                 // Preset buttons for common architectures
@@ -360,7 +370,7 @@ int main(void)
                     ImGui::TextColored(ImVec4(0, 1, 0, 1), "Network Ready");
                 }
 
-                
+
             }
 
             // Training section TO BE REVISED 
@@ -376,6 +386,17 @@ int main(void)
                 ImGui::InputInt("Epochs", &epochs);
                 if (epochs < 1) epochs = 1;
 
+                // Show Metrics Checkbox
+                if (datasetLoaded && networkCreated) {
+                    ImGui::Checkbox("Show Training Metrics", &showMetricsWindow);
+
+                    if (ImGui::Button("Clear Metrics History")) {
+                        lossHistory.clear();
+                        accuracyHistory.clear();
+                        epochNumbers.clear();
+                    }
+                }
+
                 if (datasetLoaded && networkCreated && !isTraining)
                 {
                     if (ImGui::Button("Start Training"))
@@ -383,20 +404,6 @@ int main(void)
                         isTraining = true;
                         currentEpoch = 0;
                         std::cout << "Starting training with " << epochs << " epochs, batch size " << batchSize << std::endl;
-                    }
-
-                    ImGui::SameLine();
-                    if (ImGui::Button("Train Single Batch"))
-                    {
-                        auto batch = dataset.getBatch(batchSize);
-                        network.TrainBatch(batch, learningRate);
-
-                        // Metrics
-                        currentLoss = network.CalculateAverageLoss(batch);
-                        currentAccuracy = network.CalculateAccuracy(batch);
-
-                        std::cout << "Single batch training completed. Loss: " << currentLoss
-                            << ", Accuracy: " << (currentAccuracy * 100.0f) << "%" << std::endl;
                     }
                 }
                 else if (isTraining)
@@ -424,6 +431,9 @@ int main(void)
                         currentAccuracy = epochAccuracy / numBatches;
                         currentEpoch++;
 
+                        UpdateTrainingMetrics(currentEpoch, currentLoss, currentAccuracy,
+                            lossHistory, accuracyHistory, epochNumbers, maxHistorySize);
+
                         std::cout << "Epoch " << currentEpoch << "/" << epochs
                             << " - Loss: " << currentLoss
                             << ", Accuracy: " << (currentAccuracy * 100.0f) << "%" << std::endl;
@@ -444,28 +454,8 @@ int main(void)
 
                 if (datasetLoaded && networkCreated)
                 {
-                    if (ImGui::Button("Test Single Sample")) // ADD BUTTON TO TEST NEW SAMPLES INSTEAD OF RANDOM ONES
-                    {
-                        const DataSample& sample = dataset.getRandomSample();
-                        Eigen::VectorXf output = network.Forward(sample.input);
-
-                        std::cout << "Input label: " << sample.label << std::endl;
-                        std::cout << "Network output: " << std::endl << output.transpose() << std::endl;
-                        std::cout << "Expected output: " << std::endl << sample.target.transpose() << std::endl;
-
-                        // Find predicted class
-                        int predicted = 0;
-                        float maxOutput = output[0];
-                        for (int i = 1; i < output.size(); i++) 
-                        {
-                            if (output[i] > maxOutput) 
-                            {
-                                maxOutput = output[i];
-                                predicted = i;
-                            }
-                        }
-                        std::cout << "Predicted class: " << predicted << std::endl;
-                    }
+                    
+                    // ADD BUTTON FOR USER INPUT (CANVAS)
 
                     if (ImGui::Button("Shuffle Dataset"))
                     {
@@ -476,7 +466,7 @@ int main(void)
                     // Display current metrics
                     ImGui::Separator();
                     ImGui::Text("Training Progress:");
-                    if (isTraining) 
+                    if (isTraining)
                     {
                         ImGui::Text("Epoch: %d/%d", currentEpoch, epochs);
                         ImGui::ProgressBar(static_cast<float>(currentEpoch) / static_cast<float>(epochs));
@@ -494,7 +484,7 @@ int main(void)
                 }
             }
 
-            ImGui::End(); 
+            ImGui::End();
 
             // Sample Viewer (separate window)
             if (showSampleViewer && datasetLoaded && selectedDatasetType == 0) // Only for MNIST
@@ -533,20 +523,210 @@ int main(void)
                 if (ImGui::Button("Previous Sample"))
                     currentSampleIndex = (currentSampleIndex - 1 + dataset.size()) % dataset.size();
 
-                ImGui::End(); 
-            }
-
-            // Training batch viewer (separate window)
-            if (showTrainingSampleViewer && datasetLoaded && selectedDatasetType == 0) // Only for MNIST
-            {
-                ImGui::Begin("MNIST Training Sample Viewer", &showSampleViewer);
-
-                // RENDER CURRENT SAMPLE BATCH AND LET USER CHOOSE ONE TRAINING SAMPLE TO TEST THE NETWORK 
-                // TBD
-
                 ImGui::End();
             }
 
+            // Training batch viewer (separate window) TBD
+            if (showTrainingSampleViewer && datasetLoaded && selectedDatasetType == 0) // Only for MNIST
+            {
+                //ImGui::Begin("MNIST Training Sample Viewer", &showSampleViewer);
+
+                //// RENDER CURRENT SAMPLE BATCH AND LET USER CHOOSE ONE TRAINING SAMPLE TO TEST THE NETWORK 
+
+                //ImGui::End();
+            }
+
+            // Training Metrics Window WILL BE REVISED IN THE FUTURE JUST A TEST FOR THE MOMENT
+            if (showMetricsWindow && (!lossHistory.empty() || !accuracyHistory.empty())) {
+                ImGui::Begin("Training Metrics", &showMetricsWindow);
+
+                // Styling
+                ImPlotStyle& style = ImPlot::GetStyle();
+                style.LineWeight = 2.0f;
+                style.MarkerSize = 4.0f;
+                style.ErrorBarSize = 5.0f;
+                style.ErrorBarWeight = 1.5f;
+                style.DigitalBitHeight = 8.0f;
+                style.DigitalBitGap = 4.0f;
+
+                ImVec4 lossColor = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);    // Red for loss
+                ImVec4 accuracyColor = ImVec4(0.4f, 1.0f, 0.4f, 1.0f); // Green for accuracy
+
+                // Check data before plotting
+                if (!lossHistory.empty() && !epochNumbers.empty()) 
+                {
+                    // Loss Plot
+                    if (ImPlot::BeginPlot("Training Loss", ImVec2(-1, 250)))
+                    {
+                        ImPlot::SetupAxes("Epoch", "Loss");
+
+                        // X
+                        float maxEpoch = epochNumbers.empty() ? 1.0f : *std::max_element(epochNumbers.begin(), epochNumbers.end());
+                        ImPlot::SetupAxisLimits(ImAxis_X1, 0, maxEpoch * 1.05f, ImGuiCond_Always);
+
+                        // Y
+                        float minLoss = *std::min_element(lossHistory.begin(), lossHistory.end());
+                        float maxLoss = *std::max_element(lossHistory.begin(), lossHistory.end());
+                        float lossRange = maxLoss - minLoss;
+                        float lowerBound = std::max(0.0f, minLoss - lossRange * 0.1f);
+                        ImPlot::SetupAxisLimits(ImAxis_Y1, lowerBound, maxLoss + lossRange * 0.1f, ImGuiCond_Always);
+
+                        // Color
+                        ImPlot::SetNextLineStyle(lossColor);
+                        ImPlot::PlotLine("Loss", epochNumbers.data(), lossHistory.data(),
+                            static_cast<int>(lossHistory.size()));
+
+                        // Add markers for recent points
+                        if (lossHistory.size() > 0) 
+                        {
+                            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 6, lossColor, 1, lossColor);
+                            int markerStart = std::max(0, static_cast<int>(lossHistory.size()) - 5);
+                            ImPlot::PlotScatter("Recent",
+                                epochNumbers.data() + markerStart,
+                                lossHistory.data() + markerStart,
+                                static_cast<int>(lossHistory.size()) - markerStart);
+                        }
+                        ImPlot::EndPlot();
+                    }
+                }
+                else 
+                {
+                    ImGui::TextColored(ImVec4(1, 0.7f, 0, 1), "No loss data available yet.");
+                }
+
+                if (!accuracyHistory.empty() && !epochNumbers.empty()) 
+                {
+                    // Accuracy Plot
+                    if (ImPlot::BeginPlot("Training Accuracy", ImVec2(-1, 250))) 
+                    {
+                        // Set up axes
+                        ImPlot::SetupAxes("Epoch", "Accuracy");
+
+                        // Configure X-axis to start from 0
+                        float maxEpoch = epochNumbers.empty() ? 1.0f : *std::max_element(epochNumbers.begin(), epochNumbers.end());
+                        ImPlot::SetupAxisLimits(ImAxis_X1, 0, maxEpoch * 1.05f, ImGuiCond_Always);
+
+                        // Configure Y-axis for accuracy (0 to 1 or slightly above max)
+                        float maxAccuracy = *std::max_element(accuracyHistory.begin(), accuracyHistory.end());
+                        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, std::max(1.0f, maxAccuracy * 1.05f), ImGuiCond_Always);
+
+                        // Plot the line with custom color
+                        ImPlot::SetNextLineStyle(accuracyColor);
+                        ImPlot::PlotLine("Accuracy", epochNumbers.data(), accuracyHistory.data(),
+                            static_cast<int>(accuracyHistory.size()));
+
+                        // Add markers for recent points
+                        if (accuracyHistory.size() > 0) 
+                        {
+                            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 6, accuracyColor, 1, accuracyColor);
+                            // Show marker only for the last few points
+                            int markerStart = std::max(0, static_cast<int>(accuracyHistory.size()) - 5);
+                            ImPlot::PlotScatter("Recent",
+                                epochNumbers.data() + markerStart,
+                                accuracyHistory.data() + markerStart,
+                                static_cast<int>(accuracyHistory.size()) - markerStart);
+                        }
+
+                        ImPlot::EndPlot();
+                    }
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(1, 0.7f, 0, 1), "No accuracy data available yet.");
+                }
+                if (!lossHistory.empty() && !accuracyHistory.empty()) 
+                {
+                    ImGui::Separator();
+                    ImGui::Text("Training Statistics");
+
+                    // Table for statistics
+                    if (ImGui::BeginTable("StatsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) 
+                    {
+                        ImGui::TableSetupColumn("Metric", ImGuiTableColumnFlags_WidthFixed, 150);
+                        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+                        ImGui::TableHeadersRow();
+
+                        // Current Metrics
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::Text("Current Loss");
+                        ImGui::TableSetColumnIndex(1);
+                        ImGui::TextColored(lossColor, "%.6f", lossHistory.back());
+
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::Text("Current Accuracy");
+                        ImGui::TableSetColumnIndex(1);
+                        ImGui::TextColored(accuracyColor, "%.2f%%", accuracyHistory.back() * 100.0f);
+
+                        // Best metrics
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::Text("Best Accuracy");
+                        ImGui::TableSetColumnIndex(1);
+                        float bestAccuracy = *std::max_element(accuracyHistory.begin(), accuracyHistory.end());
+                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%.2f%%", bestAccuracy * 100.0f);
+
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::Text("Lowest Loss");
+                        ImGui::TableSetColumnIndex(1);
+                        float lowestLoss = *std::min_element(lossHistory.begin(), lossHistory.end());
+                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%.6f", lowestLoss);
+
+                        // Progress info
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::Text("Data Points");
+                        ImGui::TableSetColumnIndex(1);
+                        ImGui::Text("%zu", lossHistory.size());
+
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::Text("Training Progress");
+                        ImGui::TableSetColumnIndex(1);
+                        if (isTraining) 
+                        {
+                            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Training... (%d/%d epochs)", currentEpoch, epochs);
+                        }
+                        else 
+                        {
+                            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Idle");
+                        }
+
+                        ImGui::EndTable();
+                    }
+
+                    // Performance Indicators
+                    if (lossHistory.size() > 1) 
+                    {
+                        ImGui::Separator();
+                        ImGui::Text("Recent Trends:");
+
+                        // Loss 
+                        float recentLossChange = lossHistory.back() - lossHistory[lossHistory.size() - 2];
+                        if (recentLossChange < 0) {
+                            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Loss: (%.6f)", recentLossChange);
+                        }
+                        else 
+                        {
+                            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Loss: (+%.6f)", recentLossChange);
+                        }
+
+                        // Accuracy trend
+                        float recentAccuracyChange = accuracyHistory.back() - accuracyHistory[accuracyHistory.size() - 2];
+                        if (recentAccuracyChange > 0) {
+                            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Accuracy: (+%.2f%%)", recentAccuracyChange * 100.0f);
+                        }
+                        else 
+                        {
+                            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Accuracy: (%.2f%%)", recentAccuracyChange * 100.0f);
+                        }
+                    }
+                }
+
+                ImGui::End();
+            }
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -558,6 +738,7 @@ int main(void)
     }
 
     // Cleanup
+    ImPlot::DestroyContext();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
