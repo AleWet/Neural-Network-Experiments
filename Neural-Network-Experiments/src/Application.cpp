@@ -820,7 +820,6 @@ int main(void)
                 {
                     std::fill(canvasData.begin(), canvasData.end(), 0.0f);
                     canvasNeedsUpdate = true;
-                    displayCanvasMetrics = false;
                 }
 
                 // Get the current cursor position for the canvas
@@ -949,7 +948,29 @@ int main(void)
                     ImGui::Separator();
 
                     if (ImGui::Button("Predict Digit"))
+                    {
                         displayCanvasMetrics = true;
+                        network.Forward(canvasInput);
+                        if (!isTraining && networkCreated && displayCanvasMetrics)
+                        {
+                            for (int i = 0; i < 784; i++)
+                                canvasInput[i] = canvasData[i];
+
+                            canvasPrediction = network.Forward(canvasInput);
+                            canvasMaxProb = canvasPrediction[0];
+                            canvasPredictedClass = 0;
+
+                            for (int i = 1; i < canvasPrediction.size(); i++)
+                            {
+                                if (canvasPrediction[i] > canvasMaxProb)
+                                {
+                                    canvasMaxProb = canvasPrediction[i];
+                                    canvasPredictedClass = i;
+                                }
+                            }
+                        }
+                    }
+                        
                     
                     if (displayCanvasMetrics && !isTraining && networkCreated)
                     {
