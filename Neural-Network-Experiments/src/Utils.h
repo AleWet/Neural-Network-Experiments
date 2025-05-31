@@ -17,3 +17,5 @@ void UpdateTrainingMetrics(int epoch, float loss, float accuracy,
     int maxSize);
 
 void UpdateMNISTTexture(GLuint& texture, const std::vector<float>& imageData);
+
+void UpdateCanvasTexture(GLuint& texture, const std::vector<float>& canvasData);

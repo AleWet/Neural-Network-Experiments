@@ -36,19 +36,30 @@ int main(void)
         return -1;
     }
 
-    // Set OpenGL version hints
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); //core profile ==> no standard VA 
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    GLFWmonitor* primaryMonitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode* videoMode = glfwGetVideoMode(primaryMonitor);
 
-    // GLFW stuff
-    GLFWwindow* window = glfwCreateWindow(1280, 960, "", nullptr, nullptr);
+    // Set window hints for non-resizable, non-maximizable window
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);        // Disable resizing
+    glfwWindowHint(GLFW_MAXIMIZED, GLFW_FALSE);        // Don't start maximized
+    glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);         
+
+    // Create window
+    GLFWwindow* window = glfwCreateWindow(videoMode->width, videoMode->height - 80,
+        "Neural Network Trainer", nullptr, nullptr);
+
     if (!window)
     {
         std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
         return -1;
     }
+
+    // Position the window at the top-left corner of the screen
+    glfwSetWindowPos(window, 0, 30);
     glfwMakeContextCurrent(window);
 
     // GLEW stuff
@@ -59,9 +70,16 @@ int main(void)
         glfwTerminate();
         return -1;
     }
-    GLCall(glViewport(0, 0, 1280, 960));
 
-    // ImGui stuff
+    const char* renderer = (const char*)glGetString(GL_RENDERER);
+    const char* vendor = (const char*)glGetString(GL_VENDOR);
+    std::cout << "GPU Vendor: " << vendor << std::endl;
+    std::cout << "GPU Renderer: " << renderer << std::endl;
+
+    // Set viewport to match the screen size
+    GLCall(glViewport(0, 0, videoMode->width, videoMode->height));
+
+    // ImGUI
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImPlot::CreateContext();
@@ -70,12 +88,13 @@ int main(void)
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 430");
 
-    // DEBUG
+    // DEBUG - now shows actual screen dimensions
     std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
     std::cout << "GLSL Version: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
     std::cout << "ImGui Version : " << ImGui::GetVersion() << std::endl;
+    std::cout << "Screen Resolution: " << videoMode->width << "x" << videoMode->height << std::endl;
 
-    #pragma endregion
+#pragma endregion
 
     { //additional scope to avoid memory leaks
 
@@ -86,7 +105,7 @@ int main(void)
         if (!IsShaderPathOk(Basic)) return 0;
         Shader BasicShader(Basic);
 
-        // MISSING RENDERER
+        // MISSING RENDERER TBD
 
         Dataset dataset;
         bool datasetLoaded = false;
@@ -95,7 +114,6 @@ int main(void)
         int maxSamples = 1000;                // Limit for testing
         int currentSampleIndex = 0;
         bool showSampleViewer = false;
-        bool showTrainingSampleViewer = true; // DEBUGGING, will be false and have a separate setter in the UI
         int selectedDatasetType = 0;          // 0=MNIST for now only this
         float learningRate = 0.01f;
 
@@ -130,6 +148,18 @@ int main(void)
         bool networkCreated = false;
         std::vector<int> sizes = { 1, 1 };
         Network network(sizes);
+
+        // Drawing Cavans FOR THE MOMENT ONLY FOR MNIST
+        bool showDrawingCanvas = true;
+        std::vector<float> canvasData(784, 0.0f);  // 28x28 = 784 pixels
+        unsigned int canvasTexture = 0;
+        bool canvasNeedsUpdate = true;
+        static int brushSize = 1;
+        Eigen::VectorXf canvasInput(784);
+        Eigen::VectorXf canvasPrediction = Eigen::VectorXf::Zero(10);
+        float canvasMaxProb = 0;
+        int canvasPredictedClass = 0;
+        bool displayCanvasMetrics = false;
 
         //Eigen::setNbThreads(4); // (?)
 
@@ -195,18 +225,6 @@ int main(void)
                     ImGui::TextColored(ImVec4(0, 1, 0, 1), "Dataset loaded: %zu samples", dataset.size());
                     ImGui::Text("Input size: %d", dataset.getInputSize());
                     ImGui::Text("Output size: %d", dataset.getOutputSize());
-
-                    if (selectedDatasetType == 0) // Show label distribution for MNIST
-                    {
-                        auto labelCounts = dataset.getLabelCounts();
-                        ImGui::Text("Label distribution:");
-                        for (int i = 0; i < 10; i++)
-                        {
-                            if (labelCounts[i] > 0)
-                                ImGui::Text("  %d: %d samples", i, labelCounts[i]);
-                        }
-                    }
-
                     ImGui::Checkbox("Show Sample Viewer", &showSampleViewer);
                 }
                 else
@@ -494,110 +512,110 @@ int main(void)
 
             #pragma region SECONDARY WINDOWS
 
-            // Sample Viewer (separate window) I FORGOT WHY IT'S RED I HAVE TO FIND OUT AGAIN
-            if (showSampleViewer && datasetLoaded && selectedDatasetType == 0) 
+            // Sample Viewer I FORGOT WHY IT'S RED I HAVE TO FIND OUT AGAIN
+            if (showSampleViewer && datasetLoaded && selectedDatasetType == 0)
             {
                 ImGui::Begin("MNIST Sample Viewer", &showSampleViewer);
-                ImGui::SliderInt("Sample Index", &currentSampleIndex, 0, dataset.size() - 1);
-
                 const DataSample& sample = dataset.getSample(currentSampleIndex);
-                ImGui::Text("Label: %d", sample.label);
-
-                // Update texture if sample changed
-                if (currentSampleIndex != lastDisplayedSample) 
+                // Left panel fixed width cuz it's ugly without it
+                if (ImGui::BeginChild("ImagePanel", ImVec2(400, 0), true))
                 {
-                    std::vector<float> imageData(784);
-                    for (int i = 0; i < 784; i++) 
-                        imageData[i] = sample.input[i];
+                    ImGui::SliderInt("Sample Index", &currentSampleIndex, 0, dataset.size() - 1);
+                    ImGui::Text("Label: %d", sample.label);
 
-                    UpdateMNISTTexture(mnistTexture, imageData);
-                    lastDisplayedSample = currentSampleIndex;
-                }
-
-                // Display image
-                if (mnistTexture != 0) 
-                {
-                    // Calculate display size 
-                    float imageScale = 8.0f; // Adjust this value to change size
-                    ImVec2 imageSize(28 * imageScale, 28 * imageScale);
-
-                    ImGui::Text("MNIST Image (28x28 pixels):");
-                    ImGui::Image((ImTextureID)mnistTexture, imageSize);
-                }
-
-                // Network prediction display 
-                if (networkCreated && !isTraining) 
-                {
-                    ImGui::Separator();
-                    ImGui::Text("Network Prediction:");
-
-                    // Predicted class
-                    auto prediction = network.Forward(sample.input);
-                    int predictedClass = 0;
-                    float maxProb = prediction[0];
-                    for (int i = 1; i < prediction.size(); i++) 
+                    // Update texture if sample changed
+                    if (currentSampleIndex != lastDisplayedSample) 
                     {
-                        if (prediction[i] > maxProb) 
+                        std::vector<float> imageData(784);
+                        for (int i = 0; i < 784; i++) 
+                            imageData[i] = sample.input[i];
+
+                        UpdateMNISTTexture(mnistTexture, imageData);
+                        lastDisplayedSample = currentSampleIndex;
+                    }
+
+                    // Display image
+                    if (mnistTexture != 0) 
+                    {
+                        // Calculate display size 
+                        float imageScale = 8.0f; // Adjust this value to change size
+                        ImVec2 imageSize(28 * imageScale, 28 * imageScale);
+
+                        ImGui::Text("MNIST Image (28x28 pixels):");
+                        ImGui::Image((ImTextureID)mnistTexture, imageSize);
+                    }
+
+                    // Buttons Nav
+                    if (ImGui::Button("Previous Sample"))
+                        currentSampleIndex = (currentSampleIndex - 1 + dataset.size()) % dataset.size();
+                    ImGui::SameLine();
+                    if (ImGui::Button("Next Sample"))
+                        currentSampleIndex = (currentSampleIndex + 1) % dataset.size();
+                    ImGui::SameLine();
+                    if (ImGui::Button("Random Sample"))
+                        currentSampleIndex = rand() % dataset.size();
+                }
+                ImGui::EndChild();
+
+                ImGui::SameLine();
+
+                // Right panel 
+                if (ImGui::BeginChild("PredictionPanel", ImVec2(0, 0), true))
+                {
+                    // Prediction display 
+                    if (networkCreated && !isTraining)
+                    {
+                        ImGui::Separator();
+                        ImGui::Text("Network Prediction:");
+
+                        // Predicted class
+                        auto prediction = network.Forward(sample.input);
+                        int predictedClass = 0;
+                        float maxProb = prediction[0];
+                        for (int i = 1; i < prediction.size(); i++)
                         {
-                            maxProb = prediction[i];
-                            predictedClass = i;
+                            if (prediction[i] > maxProb)
+                            {
+                                maxProb = prediction[i];
+                                predictedClass = i;
+                            }
+                        }
+
+                        // Display 
+                        ImVec4 predictionColor = (predictedClass == sample.label) ?
+                            ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1); // Green if correct, red if wrong
+
+                        ImGui::TextColored(predictionColor, "Predicted: %d (%.2f%% confidence)",
+                            predictedClass, maxProb * 100.0f);
+
+                        if (predictedClass == sample.label) 
+                        {
+                            ImGui::TextColored(ImVec4(0, 1, 0, 1), "Correct");
+                        }
+                        else 
+                        {
+                            ImGui::TextColored(ImVec4(1, 0, 0, 1), "Incorrect (actual: %d)", sample.label);
+                        }
+
+                        // Show all class probabilities as a bar chart
+                        ImGui::Text("Class Probabilities:");
+                        for (int i = 0; i < 10; i++)
+                        {
+                            float prob = prediction[i];
+                            ImVec4 barColor = (i == sample.label) ? ImVec4(0, 1, 0, 0.7f) : ImVec4(0.5f, 0.5f, 0.5f, 0.7f);
+
+                            ImGui::Text("%d:", i);
+                            ImGui::SameLine();
+                            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, barColor);
+                            ImGui::ProgressBar(prob, ImVec2(-1, 0), "");
+                            ImGui::PopStyleColor();
+                            ImGui::SameLine();
+                            ImGui::Text("%.3f", prob);
                         }
                     }
-
-                    // Display 
-                    ImVec4 predictionColor = (predictedClass == sample.label) ?
-                        ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1); // Green if correct, red if wrong
-
-                    ImGui::TextColored(predictionColor, "Predicted: %d (%.2f%% confidence)",
-                        predictedClass, maxProb * 100.0f);
-
-                    if (predictedClass == sample.label) {
-                        ImGui::TextColored(ImVec4(0, 1, 0, 1), "Correct");
-                    }
-                    else {
-                        ImGui::TextColored(ImVec4(1, 0, 0, 1), "Incorrect (actual: %d)", sample.label);
-                    }
-
-                    // Show all class probabilities as a bar chart
-                    ImGui::Text("Class Probabilities:");
-                    for (int i = 0; i < 10; i++) 
-                    {
-                        float prob = prediction[i];
-                        ImVec4 barColor = (i == sample.label) ? ImVec4(0, 1, 0, 0.7f) : ImVec4(0.5f, 0.5f, 0.5f, 0.7f);
-
-                        ImGui::Text("%d:", i);
-                        ImGui::SameLine();
-                        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, barColor);
-                        ImGui::ProgressBar(prob, ImVec2(-1, 0), "");
-                        ImGui::PopStyleColor();
-                        ImGui::SameLine();
-                        ImGui::Text("%.3f", prob);
-                    }
                 }
-
-                // Buttons Nav
-                if (ImGui::Button("Previous Sample")) 
-                    currentSampleIndex = (currentSampleIndex - 1 + dataset.size()) % dataset.size();
-               
-                ImGui::SameLine();
-                if (ImGui::Button("Next Sample")) 
-                    currentSampleIndex = (currentSampleIndex + 1) % dataset.size();
-                
-                ImGui::SameLine();
-                if (ImGui::Button("Random Sample")) 
-                    currentSampleIndex = rand() % dataset.size();
-                
+                ImGui::EndChild();
                 ImGui::End();
-            }
-
-            // Training batch viewer (separate window) TBD
-            if (showTrainingSampleViewer && datasetLoaded && selectedDatasetType == 0) // Only for MNIST
-            {
-                //ImGui::Begin("MNIST Training Sample Viewer", &showSampleViewer);
-
-                //// RENDER CURRENT SAMPLE BATCH AND LET USER CHOOSE ONE TRAINING SAMPLE TO TEST THE NETWORK 
-
-                //ImGui::End();
             }
 
             // Training Metrics Window WILL BE REVISED IN THE FUTURE JUST A TEST FOR THE MOMENT
@@ -786,6 +804,172 @@ int main(void)
                     }
                 }
 
+                ImGui::End();
+            }
+
+            // Drawing Canvas
+            if (showDrawingCanvas) {
+                ImGui::Begin("Draw Digit", &showDrawingCanvas);
+
+                const float canvasScale = 8.0f;
+                const ImVec2 canvasSize(28 * canvasScale, 28 * canvasScale);
+
+
+                ImGui::SliderInt("Brush Size", &brushSize, 1, 3);
+                if (ImGui::Button("Clear Canvas"))
+                {
+                    std::fill(canvasData.begin(), canvasData.end(), 0.0f);
+                    canvasNeedsUpdate = true;
+                    displayCanvasMetrics = false;
+                }
+
+                // Get the current cursor position for the canvas
+                ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+                // Draw canvas border
+                drawList->AddRect(canvasPos,
+                    ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
+                    IM_COL32(255, 255, 255, 255));
+
+                // Create invisible button for canvas
+                ImGui::InvisibleButton("Canvas", canvasSize);
+
+                // Mouse input
+                ImGuiIO& io = ImGui::GetIO();
+                if (ImGui::IsItemHovered())
+                {
+                    if (io.MouseDown[0]) // Left mouse button held down
+                    {
+                        // Get mouse position relative to canvas
+                        ImVec2 mousePos = ImVec2(io.MousePos.x - canvasPos.x,
+                            io.MousePos.y - canvasPos.y);
+
+                        // Convert to grid coordinates
+                        int gridX = (int)(mousePos.x / canvasScale);
+                        int gridY = (int)(mousePos.y / canvasScale);
+                        
+                        // Draw on canvas
+                        for (int dy = -brushSize; dy <= brushSize; dy++)
+                        {
+                            for (int dx = -brushSize; dx <= brushSize; dx++)
+                            {
+                                int drawX = gridX + dx;
+                                int drawY = gridY + dy;
+
+                                // Mimic pen behaviour
+                                if (drawX >= 0 && drawX < 28 && drawY >= 0 && drawY < 28)
+                                {
+                                    // Some trace on the outside
+                                    if (-brushSize == dx || brushSize == dx || -brushSize == dy || brushSize == dy)
+                                    {
+                                        int pixelIndex = drawY * 28 + drawX;
+                                        canvasData[pixelIndex] = std::min(canvasData[pixelIndex] + 0.03f, 1.0f);
+                                        canvasNeedsUpdate = true;
+                                    }
+
+                                    // Big stroke in the center
+                                    else
+                                    {
+                                        int pixelIndex = drawY * 28 + drawX;
+                                        canvasData[pixelIndex] = std::min(canvasData[pixelIndex] + 0.7f, 1.0f);
+                                        canvasNeedsUpdate = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Right mouse button to erase
+                    if (io.MouseDown[1])
+                    {
+                        ImVec2 mousePos = ImVec2(io.MousePos.x - canvasPos.x,
+                            io.MousePos.y - canvasPos.y);
+
+                        int gridX = (int)(mousePos.x / canvasScale);
+                        int gridY = (int)(mousePos.y / canvasScale);
+
+                        // Erase with brush size
+                        for (int dy = -brushSize + 1; dy < brushSize; dy++)
+                        {
+                            for (int dx = -brushSize + 1; dx < brushSize; dx++)
+                            {
+                                int drawX = gridX + dx;
+                                int drawY = gridY + dy;
+
+                                if (drawX >= 0 && drawX < 28 && drawY >= 0 && drawY < 28)
+                                {
+                                    int pixelIndex = drawY * 28 + drawX;
+                                    canvasData[pixelIndex] = 0.0f; 
+                                    canvasNeedsUpdate = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Update Texture
+                if (canvasTexture == 0 || canvasNeedsUpdate)
+                {
+                    UpdateCanvasTexture(canvasTexture, canvasData);
+
+                    // Continuous predictions
+                    if (!isTraining && networkCreated && displayCanvasMetrics)
+                    {
+                        for (int i = 0; i < 784; i++)
+                            canvasInput[i] = canvasData[i];
+
+                        canvasPrediction = network.Forward(canvasInput);
+                        canvasMaxProb = canvasPrediction[0];
+                        canvasPredictedClass = 0;
+
+                        for (int i = 1; i < canvasPrediction.size(); i++)
+                        {
+                            if (canvasPrediction[i] > canvasMaxProb)
+                            {
+                                canvasMaxProb = canvasPrediction[i];
+                                canvasPredictedClass = i;
+                            }
+                        }
+                    }
+
+                    canvasNeedsUpdate = false;
+                }
+
+                // Draw the texture on top of the invisible button
+                ImGui::SetCursorScreenPos(canvasPos);
+                ImGui::Image((ImTextureID)(uintptr_t)canvasTexture, canvasSize);
+
+                // Prediction section
+                if (!isTraining && networkCreated)
+                {
+                    ImGui::BulletText("Left click and drag to draw");
+                    ImGui::BulletText("Right click and drag to erase");
+                    ImGui::BulletText("Adjust brush size with slider");
+                    ImGui::Separator();
+
+                    if (ImGui::Button("Predict Digit"))
+                        displayCanvasMetrics = true;
+                    
+                    if (displayCanvasMetrics && !isTraining && networkCreated)
+                    {
+                        ImGui::Text("Predicted: %d (%.2f%% confidence)", canvasPredictedClass, canvasMaxProb * 100.0f);
+
+                        // Show all class probabilities as a bar chart
+                        ImGui::Text("Class Probabilities:");
+                        for (int i = 0; i < 10; i++)
+                        {
+                            float prob = canvasPrediction[i];
+                            ImGui::Text("%d:", i);
+                            ImGui::SameLine();
+                            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.5f, 0.5f, 0.5f, 0.7f));
+                            ImGui::ProgressBar(prob, ImVec2(-1, 0), "");
+                            ImGui::PopStyleColor();
+                            ImGui::SameLine();
+                            ImGui::Text("%.3f", prob);
+                        }
+                    }
+                }
                 ImGui::End();
             }
 
