@@ -44,7 +44,7 @@ Eigen::VectorXf Network::Forward(const Eigen::VectorXf& input)
 		m_Activations[i + 1] = ActivationFunction(m_PreActivations[i + 1]);
 	}
 
-	// Return the output layer activation (FOR NOW this hasn't a different activation function)
+	// Return the output layer activation (FOR NOW this hasn't a different activation function) WILL USE cross entropy
 	return m_Activations.back();
 }
 
@@ -204,11 +204,25 @@ Eigen::VectorXf Network::ActivationFunctionDerivative(const Eigen::VectorXf& x)
 	return sigmoidX.cwiseProduct(Eigen::VectorXf::Ones(sigmoidX.size()) - sigmoidX);
 }
 
+// Cross entropy function for categorization problems
 float Network::LossFunction(const Eigen::VectorXf& output, const Eigen::VectorXf& target)
 {
-	Eigen::VectorXf diff = output - target;
-	return 0.5f * diff.dot(diff);				// sum of squared differences (I don't know why online it's * 0.5 yet it was on the book)
+	// Prevent log(0) with small epsilon
+	const float epsilon = 1e-15f;
+	Eigen::VectorXf clamped_output = output.cwiseMax(epsilon).cwiseMin(1.0f - epsilon);
+
+	// -sum(target * log(output))
+	float loss = 0.0f;
+	for (int i = 0; i < target.size(); ++i) 
+	{
+		if (target[i] > 0.0f) // Only compute for non-zero targets 
+		{  
+			loss -= target[i] * std::log(clamped_output[i]);
+		}
+	}
+	return loss;
 }
+
 
 
 
